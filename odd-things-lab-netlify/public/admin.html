@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-MY">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zentio · 订单后台</title>
+<style>body{max-width:550px;margin:30px auto;padding:0 16px;background:#fff8e8;color:#271a3c;font:17px system-ui}label{display:grid;gap:5px;margin:15px 0}input,select,button{font:inherit;padding:8px}output{display:block;margin-top:15px;white-space:pre-wrap;overflow-wrap:anywhere}</style>
+<h1>订单后台</h1>
+<form id="update">
+<label>后台密码<input id="password" type="password" required></label>
+<label>订单号<input id="order" required></label>
+<label>更新进度<select id="stage"><option value="0">待付款</option><option value="1">付款已确认</option><option value="2">制作中</option><option value="3">待寄出</option><option value="4">已寄出</option><option value="5">已完成</option></select></label>
+<button name="action" value="lookup">查看订单</button>
+<button name="action" value="save">保存状态</button>
+<output id="result" aria-live="polite"></output>
+</form>
+<script>
+const $ = id => document.getElementById(id);
+$('update').onsubmit = async event => {
+  event.preventDefault();
+  const button = event.submitter;
+  const lookup = button.value === 'lookup';
+  button.disabled = true;
+  $('result').textContent = '正在更新…';
+  try {
+    const response = await fetch('/.netlify/functions/orders?' + new URLSearchParams({order:$('order').value.trim().toUpperCase()}),{
+      method:lookup ? 'GET' : 'PATCH',headers:{Authorization:'Bearer ' + $('password').value,'Content-Type':'application/json'},
+      body:lookup ? undefined : JSON.stringify({stage:Number($('stage').value)})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '更新失败。');
+    $('stage').value = data.stage;
+    const lines = data.lines.map(item => item.name + ' × ' + item.qty);
+    const shipping = data.shipping;
+    const address = shipping ? [shipping.name,shipping.phone,shipping.address,shipping.postcode,shipping.city,shipping.state].join(', ') : '旧订单无邮寄资料';
+    const method = ({qr:'QR 扫码',bank:'银行转账'})[data.paymentMethod] || '未选择';
+    $('result').textContent = lookup ? [data.code, ...lines, '收件：' + address, '付款方式：' + method, data.note || '无备注'].join('\n') : data.code + ' 的进度已更新。';
+  } catch (error) {
+    $('result').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+};
+</script>
+</html>

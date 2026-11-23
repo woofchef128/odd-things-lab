@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-MY">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>有东西研究所 · Odd Things Lab</title>
+<style>
+:root{--ink:#271a3c;--paper:#fff8e8;--yellow:#e8f68d;--purple:#ddcdff;--edge:2px solid var(--ink)}
+*{box-sizing:border-box}[hidden]{display:none!important}body{background:var(--paper);color:var(--ink);margin:0;font:16px/1.55 system-ui,sans-serif}main,header,footer{max-width:1040px;margin:auto;padding:18px}header{display:flex;align-items:center;justify-content:space-between;gap:12px}header b{font-size:1.25rem}small{display:block}nav{display:flex;gap:14px}a{color:inherit}h1{font-size:clamp(2.5rem,7vw,5.5rem);line-height:1.05;letter-spacing:-.05em;margin:10px 0}h2{margin-top:0}section{margin:24px 0}.hero,.box,article{border:var(--edge);border-radius:24px;background:#fffdf5;padding:22px}.hero{display:grid;grid-template-columns:1.25fr .75fr;align-items:center;background:var(--purple);padding:clamp(22px,5vw,50px);box-shadow:5px 6px var(--ink)}.hero p{max-width:32ch}.mascot{display:grid;place-items:center;min-height:165px;background:radial-gradient(#54398b55 1px,transparent 1px) 0 0/15px 15px}button,.cta{border:var(--edge);border-radius:40px;background:var(--yellow);padding:9px 15px;color:inherit;font:inherit;font-weight:750;cursor:pointer;text-decoration:none;display:inline-block}button:disabled{opacity:.6;cursor:wait}input,textarea,select{border:var(--edge);border-radius:8px;background:white;color:inherit;padding:8px;font:inherit;width:100%}label{display:grid;gap:4px;margin:8px 0}input[type=checkbox]{width:auto}label.check{display:block}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.symbol{font-size:3.8rem;display:grid;place-items:center;background:var(--purple);border:var(--edge);border-radius:13px;min-height:100px}article:nth-child(2) .symbol{background:#ffcfa9}article:nth-child(3) .symbol{background:var(--yellow)}.config{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.dog{width:135px;height:100px;position:relative;display:inline-grid;place-items:center;isolation:isolate}.face{width:90px;height:81px;border-radius:48% 48% 43% 43%;background:var(--fur);border:var(--edge);display:grid;place-items:center;font-size:20px;font-weight:900;white-space:pre;line-height:1;text-align:center}.dog:before,.dog:after{content:'';position:absolute;width:31px;height:55px;background:var(--fur);border:var(--edge);border-radius:50%;top:13px;z-index:-1}.dog:before{left:11px;transform:rotate(24deg)}.dog:after{right:11px;transform:rotate(-24deg)}.dog.pointy:before,.dog.pointy:after{border-radius:85% 35% 55% 40%;top:0}.dog small{position:absolute;top:0;right:22px;font-size:23px;line-height:1}.error{color:#a32035}output{display:block;margin:.6rem 0;overflow-wrap:anywhere}.pay-qr{max-width:min(240px,100%);display:block}.progress-current{font-weight:800}.checkouts{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:680px){.hero,.checkouts,.grid{grid-template-columns:1fr}.config{grid-template-columns:1fr}.mascot{margin-top:15px}}
+</style>
+<header><div><b id="brand">Zentio</b><small id="english"></small></div><nav><a href="#shop">展柜</a><a href="#track">查订单</a></nav></header>
+<main>
+<section class="hero"><div><h1>今天，<br>有东西出炉。</h1><p>原创 3D 打印、石塑黏土人偶、定制盲盒。每单都有一只小狗陪你等出炉。</p><a class="cta" href="#shop">进门逛逛 ↘</a></div><div class="mascot" id="hero-dog"></div></section>
+<p id="demo" hidden>测试店面 · 商品和价格为示例。测试订单无需付款。</p>
+<output id="startup" class="error"></output>
+<form id="checkout">
+<section id="shop"><h2>今日展柜</h2><div class="grid" id="products"></div></section>
+<div class="checkouts">
+<section class="box"><h2>捏一只跟单小狗</h2><div id="dog"></div><label class="check"><input type="checkbox" id="custom"> 自己捏</label>
+<div class="config" id="options" hidden><label>毛色<select id="color"><option value="cream">奶油</option><option value="brown">焦糖</option><option value="gray">灰灰</option></select></label><label>耳朵<select id="ears"><option value="floppy">垂耳</option><option value="pointy">尖耳</option></select></label><label>配件<select id="extra"><option value="none">无</option><option value="bow">蝴蝶结</option><option value="star">星星</option></select></label></div></section>
+<section class="box"><h2>邮寄与付款方式</h2>
+<label>收件人姓名<input id="shipping-name" autocomplete="shipping name" maxlength="100" required></label>
+<label>联络电话<input id="shipping-phone" type="tel" autocomplete="shipping tel" maxlength="30" required></label>
+<label>门牌、街道和单位号码<textarea id="shipping-address" autocomplete="shipping street-address" maxlength="300" rows="2" required></textarea></label>
+<div class="config"><label>邮编<input id="shipping-postcode" autocomplete="shipping postal-code" maxlength="16" required></label><label>城市<input id="shipping-city" autocomplete="shipping address-level2" maxlength="100" required></label><label>州属<input id="shipping-state" autocomplete="shipping address-level1" maxlength="100" required></label></div>
+<label>付款方式<select id="payment-method"><option value="qr">QR 扫码</option><option value="bank">银行转账 · Bank In</option></select></label><label>定制想法或备注<textarea id="note" maxlength="600" rows="3"></textarea></label><p>商品小计 <strong id="total">RM0.00</strong></p><button id="submit" disabled>生成订单</button><output id="checkout-status" aria-live="polite"></output></section>
+</div>
+</form>
+<section class="box" id="receipt" hidden aria-label="订单与付款"></section>
+<section class="box" id="track"><h2>小狗报进度</h2><form id="track-form"><label>订单号<input id="order" required></label><label>查询码<input id="key" required></label><button>查订单</button></form><output id="tracking" aria-live="polite"></output><div id="progress-dog"></div><ol id="timeline" aria-label="订单进度"></ol></section>
+</main><footer>Zentio Enterprise</footer>
+<script type="module" src="./shop.js"></script>
+</html>

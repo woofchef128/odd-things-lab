@@ -1,0 +1,43 @@
+{
+  "brand": "有东西研究所",
+  "english": "Odd Things Lab",
+  "whatsapp": "60124390204",
+  "live": false,
+  "products": [
+    {
+      "id": "print",
+      "name": "桌面小怪件",
+      "type": "原创 3D 打印",
+      "symbol": "▦",
+      "cents": 3900
+    },
+    {
+      "id": "clay",
+      "name": "手捏小人偶",
+      "type": "石塑黏土模型",
+      "symbol": "☻",
+      "cents": 8900
+    },
+    {
+      "id": "box",
+      "name": "未知来件",
+      "type": "定制盲盒",
+      "symbol": "✷",
+      "cents": 11900
+    }
+  ],
+  "stages": [
+    "待付款",
+    "付款已确认",
+    "制作中",
+    "待寄出",
+    "已寄出",
+    "已完成"
+  ],
+  "payment": {
+    "qrImage": "",
+    "bankName": "",
+    "accountName": "",
+    "accountNumber": ""
+  }
+}
