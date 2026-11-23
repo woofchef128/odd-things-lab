@@ -7,3 +7,4 @@ Netlify 项目根目录是解压后的目录。通过 Git 导入或用 Netlify C
 品牌：有东西研究所 · Odd Things Lab。
 
 正式模式请把 QR 图片放入 public，再填 catalog.json 的 payment.qrImage（站内路径）；同时填写 bankName、accountName、accountNumber。顾客提交邮寄资料并选择 QR 或 Bank In。付款后可通过保存的查询链接回来填写付款人姓名，生成带商品、数量、金额、邮寄资料和订单号的 WhatsApp 讯息。测试模式只预览讯息。WhatsApp 讯息和收据由顾客发送，店主在后台手动确认及更新状态。
+Odd Things Lab deployment test.
