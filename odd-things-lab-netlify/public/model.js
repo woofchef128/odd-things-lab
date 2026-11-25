@@ -206,7 +206,7 @@ const Lab = (() => {
         seen.add(key);
         const qty = integer(row.qty, 1, 99);
         totals.set(product.id, (totals.get(product.id) || 0) + qty);
-        return { id: product.id, name: product.name + (entry ? ' · ' + entry.label : ''), price: entry?.price ?? product.price, qty, variant, cat:product.cat, stocked: product.mode === 'stock' };
+        return { id: product.id, name: product.name + (entry ? ' · ' + entry.label : ''), photo: product.photo || '', price: entry?.price ?? product.price, qty, variant, cat:product.cat, stocked: product.mode === 'stock' };
       });
       for (const [id, qty] of totals) {
         const product = s.products.find(a => a.id === id);
@@ -252,6 +252,27 @@ const Lab = (() => {
         const item = { id: p.id ? text(p.id, 80) : newId(), name, cat, price: integer(p.price, 1, 99999999), stock: integer(p.stock, 0, 99999), mode: cat && p.mode !== 'custom' ? 'pre' : p.mode, lead: text(p.lead || '', 80, false), description: text(p.description || '', 200, false), photo: photo(p.photo), active: !!p.active, variants };
         const index = s.products.findIndex(x => x.id === item.id);
         if (index >= 0) s.products[index] = item; else s.products.push(item);
+      } else if (op === 'delete-test-order') {
+        const id = numId(p.order), o = s.orders.find(o => o.id === id) || fail('找不到订单');
+        if (p.confirm !== ticket(id)) fail('请核对要删除的测试订单号码');
+        if (s.events.some(e => e.order === id && e.status === '发送中')) fail('通知正在发送，请稍后再清理');
+        for (const item of o.items) {
+          const product = s.products.find(product => product.id === item.id);
+          if (item.stocked && product) product.stock += item.qty;
+        }
+        s.orders = s.orders.filter(order => order.id !== id);
+        s.events = s.events.filter(event => event.order !== id);
+        s.wishes = s.wishes.filter(wish => wish.order !== id);
+        for (const wish of s.wishes) wish.comments = wish.comments.filter(comment => comment.order !== id);
+        for (const [key, receipt] of Object.entries(s.receipts)) if (receipt.order === id) delete s.receipts[key];
+        for (const key of Object.keys(s.pins)) s.pins[key] = s.pins[key].filter(order => order !== id);
+        const phone = normalizePhone(o.phone), remaining = s.orders.filter(order => normalizePhone(order.phone) === phone).sort((a,b) => a.id-b.id);
+        if (!remaining.length) {
+          delete s.accounts[phone];
+          for (const key of Object.keys(s.members)) if (normalizePhone(s.members[key].phone) === phone) delete s.members[key];
+          for (const key of Object.keys(s.owners)) if (normalizePhone(s.owners[key]) === phone) delete s.owners[key];
+        } else if (s.accounts[phone]?.id === id) s.accounts[phone].id = remaining[0].id;
+        result = { deleted: id };
       } else if (op === 'settings') {
         const shipping = [p.west, p.east].map(v => v === null ? null : integer(v, 0, 999999));
         const qr = photo(p.qr); s.shipping = shipping; s.qr = qr;

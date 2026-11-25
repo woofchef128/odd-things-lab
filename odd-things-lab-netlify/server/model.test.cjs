@@ -107,3 +107,21 @@ test('returning customer keeps the first tracking dog on later orders', () => {
   assert.equal(s.orders.find(o=>o.id===next).dog,2);
   assert.equal(Lab.project(s,false,'visitor').member.dog,2);
 });
+test('test-order cleanup requires admin, restores stock, and keeps other orders and sequence', () => {
+  const s=Lab.initial(true), p=payload();
+  s.products[0].photo='data:image/png;base64,aGVsbG8=';
+  const result=Lab.apply(s,'order',p,false,'test-visitor');
+  const order=s.orders.find(o=>o.id===result.order);
+  assert.equal(order.items[0].photo,s.products[0].photo);
+  const cleanup={order:order.id,confirm:Lab.ticket(order.id)};
+  assert.throws(()=>Lab.apply(s,'delete-test-order',cleanup,false,'test-visitor'));
+  assert.throws(()=>Lab.apply(s,'delete-test-order',{...cleanup,confirm:'wrong'},true,'owner'));
+  const seq=s.seq;
+  Lab.apply(s,'delete-test-order',cleanup,true,'owner');
+  assert.equal(s.seq,seq);
+  assert.equal(s.products[0].stock,12);
+  assert.equal(s.orders.length,3);
+  assert.ok(!s.events.some(e=>e.order===order.id));
+  assert.ok(!Object.values(s.receipts).some(r=>r.order===order.id));
+  assert.ok(!(s.pins['test-visitor']||[]).includes(order.id));
+});
