@@ -125,3 +125,15 @@ test('test-order cleanup requires admin, restores stock, and keeps other orders 
   assert.ok(!Object.values(s.receipts).some(r=>r.order===order.id));
   assert.ok(!(s.pins['test-visitor']||[]).includes(order.id));
 });
+test('numbering reset requires admin and an empty store; next real order starts at 001', () => {
+  const s=Lab.initial(true);
+  assert.throws(()=>Lab.apply(s,'reset-order-numbering',{confirm:'RESET 001'},true,'owner'));
+  for(const o of [...s.orders]) Lab.apply(s,'delete-test-order',{order:o.id,confirm:Lab.ticket(o.id)},true,'owner');
+  assert.throws(()=>Lab.apply(s,'reset-order-numbering',{confirm:'RESET 001'},false,'visitor'));
+  assert.throws(()=>Lab.apply(s,'reset-order-numbering',{confirm:'wrong'},true,'owner'));
+  Lab.apply(s,'reset-order-numbering',{confirm:'RESET 001'},true,'owner');
+  assert.equal(Lab.project(s,true,'owner').nextOrder,'#001');
+  const r=Lab.apply(s,'order',payload(),false,'visitor');
+  assert.equal(r.order,1);
+  assert.throws(()=>Lab.apply(s,'reset-order-numbering',{confirm:'RESET 001'},true,'owner'));
+});

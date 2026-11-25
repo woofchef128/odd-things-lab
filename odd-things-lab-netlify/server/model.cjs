@@ -145,6 +145,7 @@ const Lab = (() => {
     const identities = new Map(s.orders.map(o => [o.id, byPhone.get(normalizePhone(o.phone)) || null]));
     return {
       products: admin ? s.products : s.products.filter(p => p.active), shipping: s.shipping, qr: s.qr,
+      ...(admin ? { nextOrder: ticket(s.seq + 1) } : {}),
       member: displayMember, pins: [...new Set([...(s.pins[key] || []), ...(member(s, key)?.orders || [])])],
       orders: admin ? s.orders.map(o => ({...o,identity:identities.get(o.id)})) : s.orders.map(o => ({ id: o.id, customer: masked(o.buyer), stage: o.stage, dog: o.dog, message: o.message || '', mood: o.mood, statusAt: o.statusAt, created: o.created, items: o.items.map(i => ({ name: i.name, qty: i.qty, cat: i.cat ?? s.products.find(p=>p.id===i.id)?.cat ?? 0 })), sample: o.sample, identity: identities.get(o.id) })),
       wishes: s.wishes.map(w => ({ ...w, identity: identities.get(w.order), comments: w.comments.map(c => ({ ...c, identity: c.role === 'order' ? identities.get(c.order) : null })) })),
@@ -252,6 +253,11 @@ const Lab = (() => {
         const item = { id: p.id ? text(p.id, 80) : newId(), name, cat, price: integer(p.price, 1, 99999999), stock: integer(p.stock, 0, 99999), mode: cat && p.mode !== 'custom' ? 'pre' : p.mode, lead: text(p.lead || '', 80, false), description: text(p.description || '', 200, false), photo: photo(p.photo), active: !!p.active, variants };
         const index = s.products.findIndex(x => x.id === item.id);
         if (index >= 0) s.products[index] = item; else s.products.push(item);
+      } else if (op === 'reset-order-numbering') {
+        if (s.orders.length || s.events.some(event => event.status === '发送中')) fail('请先清空测试订单；存在订单时不能重置编号');
+        if (p.confirm !== 'RESET 001') fail('请确认从 #001 开始编号');
+        s.seq = 0;
+        result = { nextOrder: '#001' };
       } else if (op === 'delete-test-order') {
         const id = numId(p.order), o = s.orders.find(o => o.id === id) || fail('找不到订单');
         if (p.confirm !== ticket(id)) fail('请核对要删除的测试订单号码');
