@@ -533,6 +533,10 @@ document.addEventListener('invalid', event => {
   hint.textContent = invalidHint(field);
   if (form.querySelector(':invalid') === field) { field.focus(); tell('资料还没齐，小狗帮你标出来了 🐶'); }
 }, true);
+document.addEventListener('keydown', event => {
+  const form=event.target.closest?.('form[data-form="checkout"]');
+  if(form&&event.key==='Enter'&&event.target.tagName==='INPUT'&&Number(form.dataset.step)<2){event.preventDefault();checkoutStep(1);}
+});
 document.addEventListener('input', event => {
   const target = event.target;
   if(target.name==='message'){const preview=target.closest('.message-options')?.querySelector('.message-preview span');if(preview)preview.textContent=target.value||'这次不捎话 🐾';}
