@@ -10,6 +10,7 @@ const art = name => window.EMBED_ART?.[name] || 'art/' + name;
 function read(key, fallback) { try { return JSON.parse(localStorage.getItem('magua4:' + key)) ?? fallback; } catch { return fallback; } }
 function save(key, value) { try { localStorage.setItem('magua4:' + key, JSON.stringify(value)); } catch { throw Error('本机储存空间不足，图片请压小一点再试。'); } }
 let state, isAdmin = false, route = 'home', ownerTab = 'orders', orderFilter = '', orderQuery = '';
+let cartCustom = read('cart-custom', {});
 let cart = read('cart', {}), requestToken = read('request', '') || crypto.randomUUID();
 let quiet = read('quiet', false), musicOn = false, selectedDog = 5, letterDone = false;
 let audioContext, beatTimer, toastTimer, busy = false, searchResults = null, lastFocused, notifiedOrders = null, welcomeChecked = false;
@@ -233,7 +234,7 @@ function cartRows() {
     const [id, variantText = '0'] = key.split('|');
     const product = state.products.find(p => p.id === id && p.active && p.mode !== 'custom');
     const variant = Number(variantText), option = product?.variants?.[variant];
-    return { key, product, qty, variant, price: option?.price ?? product?.price, label: product?.name + (option ? ' · ' + option.label : '') };
+    return { key, product, qty, variant, customization:cartCustom[key], price: option?.price ?? product?.price, label: product?.name + (option ? ' · ' + option.label : '') };
   }).filter(row => row.product && row.qty > 0);
 }
 function productCard(product) {
@@ -243,14 +244,14 @@ function productCard(product) {
     (product.mode === 'custom' ? '<small>定制研究 · 先和店长聊聊</small><a class="button primary" target="_blank" rel="noopener" href="' + wa + '?text=' + encodeURIComponent('店长，我想定制「' + product.name + '」') + '">找店长研究 ↗</a>' : '<strong class="price">' + money(variants[0]?.price ?? product.price) + '</strong><small>' + (product.mode === 'pre' ? '⏳ 预购 · ' + esc(product.lead || '制作时间请问店长') : '📦 现货 ' + product.stock + ' 件') + '</small>' +
     (variants.length ? '<label class="variant-label">选择规格<select data-variant>' + variants.map((v, i) => '<option value="' + i + '">' + esc(v.label) + ' · ' + money(v.price) + '</option>').join('') + '</select></label>' : '') +
     (product.mode === 'pre' ? '<a class="small-link" target="_blank" rel="noopener" href="' + wa + '?text=' + encodeURIComponent('我想问「' + product.name + '」的预购安排') + '">预购有疑问？先问店长 ↗</a>' : '') +
-    '<div class="buy-row"><span class="stepper"><button data-act="minus" aria-label="减少数量">−</button><output>1</output><button data-act="plus" aria-label="增加数量">+</button></span><button class="primary" data-act="add" ' + (product.mode === 'stock' && product.stock < 1 ? 'disabled' : '') + '>' + (product.mode === 'stock' && product.stock < 1 ? '小狗卖光了' : '加进购物车') + '</button></div>') + '</div></article>';
+    ((product.allowPhoto||(product.customFields||[]).length)?'<small>🎨 可填写定制资料'+(product.allowPhoto?' · 上传参考照片':'')+'</small>':'')+'<div class="buy-row"><span class="stepper"><button data-act="minus" aria-label="减少数量">−</button><output>1</output><button data-act="plus" aria-label="增加数量">+</button></span><button class="primary" data-act="add" ' + (product.mode === 'stock' && product.stock < 1 ? 'disabled' : '') + '>' + (product.mode === 'stock' && product.stock < 1 ? '小狗卖光了' : '加进购物车') + '</button></div>') + '</div></article>';
 }
 function productTools(){return '<div class=product-controls><label class=direct-sort>sort by<select id=product-sort aria-label="sort by"><option value=price-down>价钱：最高到最低</option><option value=price-up>价钱：最低到最高</option><option value=name>名字：A–Z</option><option value=name-desc>名字：Z–A</option></select></label><span>·</span><button type=button data-act=filter>filter</button></div>'+(productFilter?'<p class=search-caption>全店搜索：'+esc(productFilter)+' <button data-act=clear-filter>清除 ×</button></p>':'');}
 
 function shop() {
   const rows = cartRows(), subtotal = rows.reduce((sum, row) => sum + row.price * row.qty, 0);
   return ticker() + '' + '<div class="category-drawers">' + Lab.cats.map((name, i) => '<details class="category" data-category="'+i+'" '+(activeCategory===i?'open':'')+' '+(activeCategory!==null&&activeCategory!==i?'hidden':'')+'><summary><img src="' + art(['cat-print.webp', 'cat-clay.webp', 'cat-box.webp'][i]) + '" alt=""><span><b>' + name + '</b><small>' + ['研究出来的小东西，也接你的鬼点子。', '一个人、两个人，都给你捏成小麻瓜。', '店长出题，小狗封盒，你来拆答案。'][i] + '</small></span><i>'+ (activeCategory===i?'×':'＋')+'</i></summary>'+ (activeCategory===i?productTools():'')+'<div class="category-products">' + state.products.filter(p => p.active && (productFilter ? (p.name+' '+(p.description||'')).toLowerCase().includes(productFilter.toLowerCase()) : p.cat===i)).sort((a,b)=>productSort==='price-up'?a.price-b.price:productSort==='price-down'?b.price-a.price:productSort==='name'?a.name.localeCompare(b.name):productSort==='name-desc'?b.name.localeCompare(a.name):0).map(productCard).join('') + '</div></details>').join('') + '</div>' +
-    '<section class="cart"><div class=cart-heading><h2>🛒 麻瓜的收获</h2><button data-act=empty-cart>🧹 清空</button></div>' + (rows.length ? rows.map(row => '<div class="cart-row"><div><b>' + esc(row.label) + '</b><small>' + money(row.price) + ' × ' + row.qty + '</small></div><button data-act="cart-minus" data-key="' + esc(row.key) + '" aria-label="减少购物车数量">−</button><b>' + row.qty + '</b><button data-act="cart-plus" data-key="' + esc(row.key) + '" aria-label="增加购物车数量">+</button></div>').join('') + '<div class="cart-total"><span>商品小计</span><strong>' + money(subtotal) + '</strong></div><button class="primary wide" data-act="checkout">去付款，交给小狗打包 →</button>' : '<p class="empty">空空的。小狗已经把购物车擦三遍了。🐶</p>') + '</section>';
+    '<section class="cart"><div class=cart-heading><h2>🛒 麻瓜的收获</h2><button data-act=empty-cart>🧹 清空</button></div>' + (rows.length ? rows.map(row => '<div class="cart-row"><div><b>' + esc(row.label) + '</b>' + (row.customization ? '<small>🎨 定制资料'+(row.customization.photo?' · 已附照片':'')+'</small><button type="button" data-act="edit-customization" data-key="'+esc(row.key)+'">查看 / 修改定制</button>' : '') + '<small>' + money(row.price) + ' × ' + row.qty + '</small></div><button data-act="cart-minus" data-key="' + esc(row.key) + '" aria-label="减少购物车数量">−</button><b>' + row.qty + '</b><button data-act="cart-plus" data-key="' + esc(row.key) + '" aria-label="增加购物车数量">+</button></div>').join('') + '<div class="cart-total"><span>商品小计</span><strong>' + money(subtotal) + '</strong></div><button class="primary wide" data-act="checkout">填写地址与资料 →</button>' : '<p class="empty">空空的。小狗已经把购物车擦三遍了。🐶</p>') + '</section>';
 }
 function choices() {
   if (!$('choices')) return;
@@ -260,36 +261,99 @@ function choices() {
 function checkout() {
   if (!cartRows().length) return;
   selectedDog = state.member?.dog ?? 5;
-  dialog('📦 邮寄资料与付款', '<form data-form="checkout">' + (demo ? '<p class="demo-hint">互动样版 · 商品与金额为示例，体验时请勿实际付款。</p>' : '') + '<section class="form-section"><h2>邮寄资料</h2><p class="field-help">请使用英文 / Malay 填写。** 为必填。</p>' +
-    field('buyer', '收件人姓名 **', 'Aina Lee', 'required maxlength="65" autocomplete="shipping name" pattern="[A-Za-z0-9 .\u0026\u0027()-]+"') +
-    field('phone', '手机号码 **', '012-3456789', 'required type="tel" autocomplete="tel" pattern="[0-9+ ()-]{9,22}"') +
-    field('address', '地址 **', '123, Jalan ABC, Taman Biubiubiu', 'required maxlength="70" autocomplete="shipping street-address"') +
-    '<div class="pair">' + field('postcode', '邮编 **', '50000', 'required inputmode="numeric" pattern="[0-9]{5}" maxlength="5"') + '<label>城市 **<select name="city" required><option value="">先填邮编或选择城市</option></select></label>' + '</div><label>州属 **<select name="state" required><option value="">选择州属</option>' + Lab.states.map(s => '<option>' + s + '</option>').join('') + '</select></label><label id="manual-city-label" hidden>城市名称 **<input name="cityManual" maxlength="65" placeholder="手动填写城市" disabled></label><small class="field-help" id="postcode-hint">填好邮编，小狗会帮你找城市和州属。</small></section>' +
-    '<section class="form-section payment"><h2>💰 付款</h2><p class="payment-quip">有现货，小狗就封箱。预购还在长大，店长的手还在动。⏳</p>' +
-    (state.qr ? '<img class="payment-qr" src="' + state.qr + '" alt="店长提供的 DuitNow 收款二维码"><p class="field-help">用 TNG 或银行 App 扫码付款。</p>' : '') +
-    '<div class="tng-row"><div><small>TNG 转账</small><b>012-4390204</b></div><button type="button" data-act="copy">复制</button></div><p class="recipient">收款人 · ZENTIO ENTERPRISE</p><div id="bill" class="bill"></div>' +
-    field('payer', '付款人 TNG 全名 **', '用于核对付款', 'required maxlength="90"') + '<p class="field-help">转账备注请填 TNG 全名，付款截图在提交后到 WhatsApp 附上。</p>' +
-    '<details class="choose-dog"><summary>🐶 要选一只跟单小狗吗？<small>不选就由毛毛接待。</small></summary><div id="choices"></div></details>' + messageFields() + '<label class="checkbox"><input name="consent" type="checkbox"> 通过 WhatsApp 接收订单进度</label><button class="primary wide">提交订单，拿号码牌 🎫</button></section></form>', 'checkout-modal');
-  choices(); cityOptions(); bill();
+  const regions = [['west','West Malaysia',0],['east','East Malaysia',1],['singapore','Singapore',2]];
+  dialog('🛒 麻瓜结账处', `<form data-form="checkout" data-step="0">
+    ${demo ? '<p class="demo-hint">互动样版 · 请勿实际付款。</p>' : ''}
+    <ol class="checkout-progress"><li aria-current="step">1 配送／自取</li><li>2 顾客资料</li><li>3 付款</li></ol>
+    <section data-checkout-step="0" class="checkout-step"><h2>🚚 服务选项</h2>
+      <div class="fulfillment-tabs"><label><input type="radio" name="fulfillment" value="delivery" checked>🚚 配送</label><label><input type="radio" name="fulfillment" value="pickup">🏡 自取</label></div>
+      <fieldset id="delivery-fields"><legend>📍 配送地址</legend>
+        ${field('address', '地址 **', '123, Jalan ABC, Taman Biubiubiu', 'required maxlength="160" autocomplete="shipping street-address"')}
+        <p class="field-help">请用英文 / Malay 填写地址。选择配送地区后确认邮编与城市。</p>
+        <div class="shipping-options">${regions.map(([value,label,index]) => `<label class="shipping-choice"><input type="radio" name="region" value="${value}" ${index === 0 ? 'checked' : ''}><span><b>${label}</b><small>${state.shipping[index] == null ? '运费待店长设置，请先联系店长' : money(state.shipping[index])}</small></span></label>`).join('')}</div>
+        <div class="pair">${field('postcode', '邮编 **', '50000', 'required inputmode="numeric" pattern="[0-9]{5}" maxlength="5"')}<label>城市 **<select name="city" required><option value="">先填邮编或选择城市</option></select></label></div>
+        <label>州属 **<select name="state" required><option value="">选择州属</option>${Lab.states.map(s=>'<option>'+s+'</option>').join('')}<option>Singapore</option></select></label>
+        <label id="manual-city-label" hidden>城市名称 **<input name="cityManual" maxlength="65" disabled></label><small class="field-help" id="postcode-hint">填好邮编，小狗会帮你找城市和州属。</small>
+      </fieldset>
+      <div id="pickup-details" hidden><h3>🏡 自取 · 不收运费</h3><p>${esc(state.pickup?.address || '自取地点请先联系店长确认。')}</p><p class="field-help">${esc(state.pickup?.instructions || '商品做好后，店长会与你确认自取时间。')}</p></div>
+      <p id="shipping-error" role="status" class="field-help"></p><button type="button" class="primary wide" data-act="checkout-next">下一步：顾客资料 →</button>
+    </section>
+    <section data-checkout-step="1" class="checkout-step" hidden><h2>👤 顾客资料</h2>
+      ${field('buyer','顾客名字 **','Your name','required maxlength="65" autocomplete="name"')}
+      ${field('phone','顾客电话号码 **','012-3456789 / +65 8123 4567','required type="tel" autocomplete="tel" pattern="[0-9+ ()-]{8,22}"')}
+      ${field('email','顾客邮箱 / Gmail **','name@gmail.com','required type="email" maxlength="254" autocomplete="email"')}
+      <h3>📦 收件人资料</h3><label class="checkbox"><input type="checkbox" name="sameRecipient" checked>收件人名字、电话同顾客</label>
+      <fieldset id="recipient-fields" disabled hidden>${field('recipientName','收件人名字 **','','required maxlength="65" autocomplete="shipping name"')}${field('recipientPhone','收件人电话号码 **','','required type="tel" pattern="[0-9+ ()-]{8,22}" autocomplete="shipping tel"')}</fieldset>
+      <h3>💬 Note to seller · 捎句话</h3>${messageFields()}
+      <div class="checkout-actions"><button type="button" data-act="checkout-back">← 返回</button><button type="button" class="primary" data-act="checkout-next">下一步：付款 →</button></div>
+    </section>
+    <section data-checkout-step="2" class="checkout-step payment" hidden><h2>💰 核对与付款</h2><div id="checkout-summary" class="checkout-summary"></div><div id="bill" class="bill"></div>
+      ${state.qr ? '<img class="payment-qr" src="'+state.qr+'" alt="店长提供的 DuitNow 收款二维码"><p class="field-help">用 TNG 或银行 App 扫码付款。</p>' : ''}
+      <div class="tng-row"><div><small>TNG 转账</small><b>012-4390204</b></div><button type="button" data-act="copy">复制</button></div><p class="recipient">收款人 · ZENTIO ENTERPRISE</p>
+      ${field('payer','付款人 TNG 全名 **','用于核对付款','required maxlength="90"')}<p class="field-help">转账备注请填 TNG 全名，付款截图在提交后到 WhatsApp 附上。</p>
+      <details class="choose-dog"><summary>🐶 要选一只跟单小狗吗？<small>不选就由毛毛接待。</small></summary><div id="choices"></div></details>
+      <label class="checkbox"><input name="consent" type="checkbox">通过 WhatsApp 接收订单进度</label><div class="checkout-actions"><button type="button" data-act="checkout-back">← 返回资料</button><button class="primary" type="submit">提交订单，拿号码牌 🎫</button></div>
+    </section></form>`, 'checkout-modal');
+  choices(); cityOptions(); deliveryFields(); bill();
 }
 function cityOptions(preferred='',matches=[]){
   const form=document.querySelector('form[data-form="checkout"]');if(!form)return;
-  const index=Lab.states.indexOf(form.elements.state.value);
-  const candidates=matches.filter(row=>row[0]===index).map(row=>row[1]);
-  const values=[...new Set([...candidates,...(STATE_CITIES[index]||Object.values(STATE_CITIES).flat())])];
-  form.elements.city.innerHTML='<option value="">选择城市</option>'+values.map(city=>'<option value="'+esc(city)+'">'+esc(city)+'</option>').join('')+'<option value="__other__">其他城市（手动填写）</option>';
-  if(preferred&&values.includes(preferred))form.elements.city.value=preferred;
-  else if(candidates.length)form.elements.city.value=candidates[0];
+  if(form.elements.region.value==='singapore'){
+    form.elements.city.innerHTML='<option value="Singapore">Singapore</option>';
+    form.elements.state.value='Singapore';
+  } else {
+    const index=Lab.states.indexOf(form.elements.state.value);
+    const candidates=matches.filter(row=>row[0]===index).map(row=>row[1]);
+    const values=[...new Set([...candidates,...(STATE_CITIES[index]||Object.values(STATE_CITIES).flat())])];
+    form.elements.city.innerHTML='<option value="">选择城市</option>'+values.map(city=>'<option value="'+esc(city)+'">'+esc(city)+'</option>').join('')+'<option value="__other__">其他城市（手动填写）</option>';
+    if(preferred&&values.includes(preferred))form.elements.city.value=preferred;
+    else if(candidates.length)form.elements.city.value=candidates[0];
+  }
   $('manual-city-label').hidden=true;form.elements.cityManual.disabled=true;form.elements.cityManual.required=false;
 }
+function deliveryFields(){
+  const form=document.querySelector('form[data-form="checkout"]');if(!form)return;
+  const pickup=form.elements.fulfillment.value==='pickup',sg=form.elements.region.value==='singapore';
+  $('delivery-fields').hidden=pickup;$('delivery-fields').disabled=pickup;$('pickup-details').hidden=!pickup;
+  form.elements.postcode.pattern=sg?'[0-9]{6}':'[0-9]{5}';form.elements.postcode.maxLength=sg?6:5;form.elements.postcode.placeholder=sg?'018956':'50000';
+  if(sg){form.elements.state.value='Singapore';cityOptions();}else if(form.elements.state.value==='Singapore'){form.elements.state.value='';cityOptions();}
+  $('postcode-hint').textContent=sg?'新加坡使用六位邮编。':'填好邮编，小狗会帮你找城市和州属。';
+  bill();
+}
 function bill() {
-  const form = document.querySelector('form[data-form="checkout"]');
-  if (!form) return;
-  const subtotal = cartRows().reduce((sum, row) => sum + row.price * row.qty, 0);
-  const index = Lab.states.indexOf(form.elements.state.value);
-  const shipping = index < 0 ? null : state.shipping[[9, 10, 14].includes(index) ? 1 : 0];
-  form.dataset.total = shipping === null ? '' : subtotal + shipping;
-  $('bill').innerHTML = '<span>商品 ' + money(subtotal) + ' · 运费 ' + (shipping === null ? (index < 0 ? '请选择州属' : '待店长确认') : money(shipping)) + '</span><b>应付 ' + (shipping === null ? '待确认' : money(subtotal + shipping)) + '</b>';
+  const form = document.querySelector('form[data-form="checkout"]');if(!form)return;
+  const subtotal = cartRows().reduce((sum,row)=>sum+row.price*row.qty,0);
+  const pickup=form.elements.fulfillment.value==='pickup',region=form.elements.region.value;
+  const shipping=pickup?0:state.shipping[['west','east','singapore'].indexOf(region)];
+  form.dataset.total=shipping==null?'':String(subtotal+shipping);
+  $('bill').innerHTML='<span>商品 '+money(subtotal)+' · '+(pickup?'自取：不收运费':'运费 '+(shipping==null?'待店长设置':money(shipping)))+'</span><b>应付 '+(shipping==null?'待确认':money(subtotal+shipping))+'</b>';
+  $('shipping-error').textContent=shipping==null?'该地区暂未设置运费，请联系店长，或选择其他服务方式。':'';
+}
+function checkoutStep(delta){
+  const form=document.querySelector('form[data-form="checkout"]');if(!form)return;
+  const step=Number(form.dataset.step),section=form.querySelector('[data-checkout-step="'+step+'"]');
+  if(delta>0){
+    const fields=[...section.querySelectorAll('input,select,textarea')].filter(el=>!el.disabled&&!el.closest('fieldset[disabled]'));
+    for(const input of fields)if(!input.reportValidity())return;
+    if(step===0&&form.elements.fulfillment.value==='delivery'){
+      const region=form.elements.region.value,index=Lab.states.indexOf(form.elements.state.value);
+      const expected=index<0?'singapore':[9,10,14].includes(index)?'east':'west';
+      if(region!==expected){tell('配送地区与州属不一致，请重新选择');return;}
+    }
+    if(!form.dataset.total){tell('请先确认运费');return;}
+  }
+  const next=Math.max(0,Math.min(2,step+delta));form.dataset.step=next;
+  form.querySelectorAll('[data-checkout-step]').forEach(el=>el.hidden=Number(el.dataset.checkoutStep)!==next);
+  form.querySelectorAll('.checkout-progress li').forEach((el,i)=>i===next?el.setAttribute('aria-current','step'):el.removeAttribute('aria-current'));
+  if(next===2){
+    const same=form.elements.sameRecipient.checked,pickup=form.elements.fulfillment.value==='pickup';
+    $('checkout-summary').innerHTML='<h3>🛍️ 订单商品</h3>'+cartRows().map(row=>'<p>'+esc(row.label)+' × '+row.qty+(row.customization?'<small>含定制资料'+(row.customization.photo?'与照片':'')+'</small>':'')+'</p>').join('')+'<h3>'+(pickup?'🏡 自取':'🚚 配送')+'</h3><p>'+esc(pickup?(state.pickup?.address||'地点待店长确认'):[form.elements.address.value,form.elements.postcode.value,form.elements.city.value==='__other__'?form.elements.cityManual.value:form.elements.city.value,form.elements.state.value].join(', '))+'</p><p>顾客：'+esc(form.elements.buyer.value)+' · '+esc(form.elements.phone.value)+'<br>'+esc(form.elements.email.value)+'<br>收件人：'+esc(same?form.elements.buyer.value:form.elements.recipientName.value)+' · '+esc(same?form.elements.phone.value:form.elements.recipientPhone.value)+'</p>';bill();
+  }
+  modal.scrollTop=0;section.blur?.();
+}
+function customizationForm(product,variant,qty,key=''){
+  const saved=key?cartCustom[key]||{}:{};
+  dialog('🎨 '+product.name+' · 定制资料', '<form data-form="customize" data-id="'+esc(product.id)+'" data-variant="'+variant+'" data-qty="'+qty+'" data-key="'+esc(key)+'"><p>'+esc(product.variants?.[variant]?.label||product.name)+' · '+money(product.variants?.[variant]?.price??product.price)+' × '+qty+'</p>'+(product.allowPhoto?'<label>📷 上传照片来定制'+(product.requirePhoto?' **':'（选填）')+'<input name="customPhoto" type="file" accept="image/png,image/jpeg,image/webp" '+(product.requirePhoto&&!saved.photo?'required':'')+'></label><p class="field-help">支持 JPG、PNG、WebP；仅供店长处理这项定制，不会公开显示。</p>'+ (saved.photo?'<img class="upload-preview" src="'+saved.photo+'" alt="已选定制照片">':''):'')+(product.customFields||[]).map((field,i)=>'<label>'+esc(field.label)+(field.required?' **':'（选填）')+'<textarea name="customField'+i+'" maxlength="200" '+(field.required?'required':'')+'>'+esc(saved.fields?.find(value=>value.label===field.label)?.value||'')+'</textarea></label>').join('')+'<label>定制备注（选填）<textarea name="customRemark" maxlength="300">'+esc(saved.remark||'')+'</textarea></label><button class="primary wide" type="submit">'+(key?'保存定制资料':'确认，加入购物车')+'</button></form>');
 }
 function ticket(order,own=false){
   const mood=lookFor(order),look=lookKeys[order.stage][mood];
@@ -359,28 +423,29 @@ function adminPage() {
   if (ownerTab === 'orders') body = '<div class="owner-stats"><span>待核款 <b>' + state.orders.filter(o => o.stage === 0).length + '</b></span><span>制作中 <b>' + state.orders.filter(o => o.stage === 1).length + '</b></span><span>已寄出 <b>' + state.orders.filter(o => o.stage === 3).length + '</b></span></div><label>搜订单<input id="owner-query" placeholder="订单号、姓名或电话" value="' + esc(orderQuery) + '"></label><select id="owner-filter"><option value="">所有订单状态</option>' + stageOptions(orderFilter === '' ? -1 : Number(orderFilter)) + '</select><div id="owner-orders">' + orderList() + '</div>' + (!state.orders.length ? '<p>下一笔订单号码：<b>' + esc(state.nextOrder || '待确认') + '</b></p><button type="button" data-act="reset-order-numbering">从 #001 开始正式接单</button>' : '');
   if (ownerTab === 'products') body = '<button class="primary" data-act="product">＋ 上新商品</button>' + state.products.map(p => '<article class="admin-order"><div><b>' + esc(p.name) + '</b><small>' + Lab.cats[p.cat] + ' · ' + (p.active ? '上架' : '已下架') + ' · ' + (p.mode === 'stock' ? '现货 ' + p.stock : p.mode === 'pre' ? '预购' : '联系定制') + '</small></div><button data-act="product" data-id="' + p.id + '">编辑</button></article>').join('');
   if (ownerTab === 'comments') body = state.wishes.map(w => '<section class="admin-letter"><small>' + Lab.ticket(w.order) + ' · ' + (w.done ? '已研究完毕' : '待考虑研究') + '</small><h3>' + esc(w.text) + '</h3>' + comments(w) + '<div class="row"><button data-act="owner-reply" data-id="' + w.id + '">回复留言</button><button data-act="mark" data-id="' + w.id + '">' + (w.done ? '移回待考虑' : '实现点子，拆信盖章 ✓') + '</button></div></section>').join('') || '<p class="empty">信箱暂时空着。</p>';
-  if (ownerTab === 'settings') body = '<form data-form="settings" class="settings-form"><h2>运费与付款</h2>' + field('west', '西马运费 · RM', '未填写时先向店长确认', 'type="number" min="0" step=".01"', state.shipping[0] === null ? '' : state.shipping[0] / 100) + field('east', '东马及纳闽运费 · RM', '', 'type="number" min="0" step=".01"', state.shipping[1] === null ? '' : state.shipping[1] / 100) + '<label>DuitNow QR 图片<input name="photo" type="file" accept="image/png,image/jpeg,image/webp"></label>' + (state.qr ? '<img class="payment-qr" src="' + state.qr + '" alt="当前 QR">' : '<p class="field-help">尚未放 QR，顾客可使用 TNG 号码转账。</p>') + '<label class="checkbox"><input type="checkbox" name="clear">移除现有 QR</label><button class="primary">保存设置</button></form><section class="notification-list"><h2>通知记录</h2><button type="button" data-act="browser-notify">🔔 开启新订单桌面提醒</button><p class="field-help">' + (demo ? '样版不发送真实邮件或 WhatsApp。正式版配置好通知服务后会自动处理。' : '订单和状态更改会在这里留下通知处理记录。') + '</p>' + ((state.events || []).slice(-20).reverse().map(e => '<div class="notification"><b>' + e.type + ' · ' + Lab.ticket(e.order) + '</b><small>' + esc(e.status) + (e.error ? ' · ' + esc(e.error) : '') + '</small>' + (!['已发送', '发送中'].includes(e.status) ? '<button data-act="retry-event" data-id="' + e.id + '">重新排入发送</button>' : '') + '</div>').join('') || '<p>暂无通知</p>') + '</section>';
+  if (ownerTab === 'settings') body = '<form data-form="settings" class="settings-form"><h2>运费与付款</h2>' + field('west', '西马运费 · RM', '未填写时先向店长确认', 'type="number" min="0" step=".01"', state.shipping[0] === null ? '' : state.shipping[0] / 100) + field('east', '东马及纳闽运费 · RM', '', 'type="number" min="0" step=".01"', state.shipping[1] === null ? '' : state.shipping[1] / 100) + field('singapore', 'Singapore 运费 · RM', '留空时暂不接受新加坡配送', 'type="number" min="0" step=".01"', state.shipping[2] == null ? '' : state.shipping[2] / 100) + '<h3>🏡 自取安排</h3>' + field('pickupAddress','自取地点','留空则提示顾客联系店长','maxlength="200"',state.pickup?.address||'') + field('pickupInstructions','自取时间 / 说明','商品做好后预约自取','maxlength="300"',state.pickup?.instructions||'') + '<label>DuitNow QR 图片<input name="photo" type="file" accept="image/png,image/jpeg,image/webp"></label>' + (state.qr ? '<img class="payment-qr" src="' + state.qr + '" alt="当前 QR">' : '<p class="field-help">尚未放 QR，顾客可使用 TNG 号码转账。</p>') + '<label class="checkbox"><input type="checkbox" name="clear">移除现有 QR</label><button class="primary">保存设置</button></form><section class="notification-list"><h2>通知记录</h2><button type="button" data-act="browser-notify">🔔 开启新订单桌面提醒</button><p class="field-help">' + (demo ? '样版不发送真实邮件或 WhatsApp。正式版配置好通知服务后会自动处理。' : '订单和状态更改会在这里留下通知处理记录。') + '</p>' + ((state.events || []).slice(-20).reverse().map(e => '<div class="notification"><b>' + e.type + ' · ' + Lab.ticket(e.order) + '</b><small>' + esc(e.status) + (e.error ? ' · ' + esc(e.error) : '') + '</small>' + (!['已发送', '发送中'].includes(e.status) ? '<button data-act="retry-event" data-id="' + e.id + '">重新排入发送</button>' : '') + '</div>').join('') || '<p>暂无通知</p>') + '</section>';
   return '<div class="owner-heading"><h1>店长工作台</h1><button data-act="logout">退出</button></div><div class="owner-tabs">' + Object.entries(tabs).map(([key, value]) => '<button data-act="owner-tab" data-key="' + key + '" aria-pressed="' + (key === ownerTab) + '">' + value + '</button>').join('') + '</div>' + body;
 }
 function productForm(id) {
   const p = state.products.find(p => p.id === id) || { cat: 0, stock: 0, price: 2900, mode: 'stock', active: true, variants: [] };
-  dialog(id ? '编辑商品' : '上新商品', '<form data-form="product" data-id="' + esc(id || '') + '">' + field('name', '商品名字 **', '', 'required maxlength="60"', p.name) + '<label>分区<select name="cat">' + options(Lab.cats, p.cat) + '</select></label>' + field('description', '小介绍 / 吐槽', '', 'maxlength="200"', p.description) + field('price', '价格 RM **', '', 'required type="number" min=".01" step=".01"', p.price / 100) + '<label>销售方式<select name="mode"><option value="stock" ' + (p.mode === 'stock' ? 'selected' : '') + '>现货</option><option value="pre" ' + (p.mode === 'pre' ? 'selected' : '') + '>预购</option><option value="custom" ' + (p.mode === 'custom' ? 'selected' : '') + '>联系店长定制</option></select></label><p class="field-help">粘土与盲盒按预购制作。定制商品会显示联系店长。</p>' + field('stock', '现货库存', '', 'required type="number" min="0" max="99999"', p.stock) + field('lead', '预购制作时间', '例如 7–10 天', 'maxlength="80"', p.lead) + '<label>规格与价格（每行一项，选填）<textarea name="variants" rows="3" placeholder="1 位麻瓜 | 59\n2 位麻瓜 | 99">' + esc((p.variants || []).map(v => v.label + ' | ' + v.price / 100).join('\n')) + '</textarea></label><label>上传真实商品图片<input name="photo" type="file" accept="image/png,image/jpeg,image/webp"></label>' + (p.photo ? '<img class="upload-preview" src="' + p.photo + '" alt="当前商品图片">' : '') + '<label class="checkbox"><input type="checkbox" name="clear">移除当前图片</label><label class="checkbox"><input type="checkbox" name="active" ' + (p.active ? 'checked' : '') + '>上架销售</label><button class="primary wide">保存商品</button></form>');
+  dialog(id ? '编辑商品' : '上新商品', '<form data-form="product" data-id="' + esc(id || '') + '">' + field('name', '商品名字 **', '', 'required maxlength="60"', p.name) + '<label>分区<select name="cat">' + options(Lab.cats, p.cat) + '</select></label>' + field('description', '小介绍 / 吐槽', '', 'maxlength="200"', p.description) + field('price', '价格 RM **', '', 'required type="number" min=".01" step=".01"', p.price / 100) + '<label>销售方式<select name="mode"><option value="stock" ' + (p.mode === 'stock' ? 'selected' : '') + '>现货</option><option value="pre" ' + (p.mode === 'pre' ? 'selected' : '') + '>预购</option><option value="custom" ' + (p.mode === 'custom' ? 'selected' : '') + '>联系店长定制</option></select></label><p class="field-help">粘土与盲盒按预购制作。定制商品会显示联系店长。</p>' + field('stock', '现货库存', '', 'required type="number" min="0" max="99999"', p.stock) + field('lead', '预购制作时间', '例如 7–10 天', 'maxlength="80"', p.lead) + '<label>规格与价格（每行一项，选填）<textarea name="variants" rows="3" placeholder="1 位麻瓜 | 59\n2 位麻瓜 | 99">' + esc((p.variants || []).map(v => v.label + ' | ' + v.price / 100).join('\n')) + '</textarea></label><h3>🎨 顾客定制资料</h3><label class="checkbox"><input type="checkbox" name="allowPhoto" ' + (p.allowPhoto?'checked':'') + '>允许顾客上传定制照片</label><label class="checkbox"><input type="checkbox" name="requirePhoto" ' + (p.requirePhoto?'checked':'') + '>开启上传时，照片必须填写</label><label>定制文字栏（每行一项；必填项末尾加 *）<textarea name="customFields" rows="3" placeholder="定制名字 *&#10;纪念日期">' + esc((p.customFields||[]).map(field=>field.label+(field.required?' *':'')).join('\n')) + '</textarea></label><p class="field-help">开启后，顾客填写照片 / 定制资料再加入购物车。定价定制请选择「现货」或「预购」，「联系店长定制」仍为询价入口。</p><label>上传真实商品图片<input name="photo" type="file" accept="image/png,image/jpeg,image/webp"></label>' + (p.photo ? '<img class="upload-preview" src="' + p.photo + '" alt="当前商品图片">' : '') + '<label class="checkbox"><input type="checkbox" name="clear">移除当前图片</label><label class="checkbox"><input type="checkbox" name="active" ' + (p.active ? 'checked' : '') + '>上架销售</label><button class="primary wide">保存商品</button></form>');
 }
 function manageOrder(id) {
   const o = state.orders.find(o => o.id === Number(id));
-  dialog('处理 ' + Lab.ticket(o.id), '<form data-form="update" data-id="' + o.id + '"><input type="hidden" name="version" value="' + (o.version || 0) + '"><p><b>' + esc(o.buyer) + '</b> · ' + esc(o.phone) + '</p><small>' + esc([o.postcode, o.city, o.state].filter(Boolean).join(' · ')) + '</small><p>应付 ' + money(o.total) + '</p>' + o.items.map((i, n) => field('qty' + n, i.name + ' · 数量', '', 'required type="number" min="0" max="99"', i.qty)).join('') + field('address', '邮寄地址', '', 'required maxlength="70"', o.address) + '<label>订单状态<select name="stage">' + stageOptions(o.stage) + '</select></label><p class="field-help">换状态后，表情从该状态的第一天开始。之后每天自动换一个表情。</p>' + field('carrier', '快递公司', '', 'maxlength="60"', o.carrier) + field('tracking', '运单号码', '', 'maxlength="100"', o.tracking) + field('url', '物流链接', 'https://', 'type="url" maxlength="500"', o.url) + field('note', '改订 / 退款备注', '', 'maxlength="200"', o.note) + '<a class="button" target="_blank" rel="noopener" href="https://wa.me/' + (o.phone.startsWith('0') ? '60' + o.phone.slice(1) : o.phone) + '?text=' + encodeURIComponent('你好，关于 ' + Lab.ticket(o.id) + ' 的订单：') + '">联系这位麻瓜 ↗</a><button class="primary wide">保存订单</button></form><button type="button" data-act="delete-test-order" data-i="' + o.id + '">🧹 删除这笔测试订单</button>');
+  dialog('处理 ' + Lab.ticket(o.id), '<div class="admin-customer-details"><h3>👤 顾客</h3><p>' + esc(o.buyer) + ' · ' + esc(o.phone) + '<br>' + esc(o.email||'旧订单未留邮箱') + '</p><h3>' + (o.fulfillment==='pickup'?'🏡 自取':'🚚 配送 · '+esc({west:'West Malaysia',east:'East Malaysia',singapore:'Singapore'}[o.region]||o.state||'')) + '</h3><p>收件人：' + esc(o.recipientName||o.buyer) + ' · ' + esc(o.recipientPhone||o.phone) + '</p>' + (o.fulfillment==='pickup'?'<p>'+esc(o.pickupInfo?.address||'自取地点待确认')+'<br>'+esc(o.pickupInfo?.instructions||'')+'</p>':'') + o.items.filter(item=>item.customization).map(item=>'<section class="admin-customization"><h3>🎨 '+esc(item.name)+'</h3>'+(item.customization.photo?'<a download="custom-reference-'+o.id+'.webp" href="'+item.customization.photo+'"><img class="upload-preview" src="'+item.customization.photo+'" alt="顾客定制参考照片"><small>点击保存参考照片</small></a>':'')+(item.customization.fields||[]).map(field=>'<p>'+esc(field.label)+'：'+esc(field.value||'未填写')+'</p>').join('')+'<p>'+esc(item.customization.remark||'无定制备注')+'</p></section>').join('') + '</div><form data-form="update" data-id="' + o.id + '"><input type="hidden" name="version" value="' + (o.version || 0) + '"><p><b>' + esc(o.buyer) + '</b> · ' + esc(o.phone) + '</p><small>' + esc([o.postcode, o.city, o.state].filter(Boolean).join(' · ')) + '</small><p>应付 ' + money(o.total) + '</p>' + o.items.map((i, n) => field('qty' + n, i.name + ' · 数量', '', 'required type="number" min="0" max="99"', i.qty)).join('') + field('address', o.fulfillment==='pickup'?'地址（自取不必填）':'邮寄地址', '', (o.fulfillment==='pickup'?'':'required ')+'maxlength="160"', o.address) + '<label>订单状态<select name="stage">' + stageOptions(o.stage) + '</select></label><p class="field-help">换状态后，表情从该状态的第一天开始。之后每天自动换一个表情。</p>' + field('carrier', '快递公司', '', 'maxlength="60"', o.carrier) + field('tracking', '运单号码', '', 'maxlength="100"', o.tracking) + field('url', '物流链接', 'https://', 'type="url" maxlength="500"', o.url) + field('note', '改订 / 退款备注', '', 'maxlength="200"', o.note) + '<a class="button" target="_blank" rel="noopener" href="https://wa.me/' + (o.phone.startsWith('0') ? '60' + o.phone.slice(1) : o.phone) + '?text=' + encodeURIComponent('你好，关于 ' + Lab.ticket(o.id) + ' 的订单：') + '">联系这位麻瓜 ↗</a><button class="primary wide">保存订单</button></form><button type="button" data-act="delete-test-order" data-i="' + o.id + '">🧹 删除这笔测试订单</button>');
 }
-async function upload(input, previous) {
+async function upload(input, previous, maxLength=950000) {
   const file = input.files[0];
   if (!file) return previous || '';
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw Error('请选 PNG、JPG 或 WebP 图片');
   // Resize large phone images for the shop without changing their content.
   const image = await createImageBitmap(file);
-  const canvas = document.createElement('canvas'), ratio = Math.min(1, 1200 / Math.max(image.width, image.height));
+  const canvas = document.createElement('canvas'), ratio = Math.min(1, (maxLength<950000?800:1200) / Math.max(image.width, image.height));
   canvas.width = Math.round(image.width * ratio); canvas.height = Math.round(image.height * ratio);
   canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height); image.close();
-  const data = canvas.toDataURL('image/webp', .86);
-  if (data.length > 950000) throw Error('图片内容较大，请压缩到 700KB 再上传');
+  let data = canvas.toDataURL('image/webp', .86);
+  for(let quality=.7;data.length>maxLength&&quality>=.3;quality-=.15)data=canvas.toDataURL('image/webp',quality);
+  if (data.length > maxLength) throw Error(maxLength<950000?'定制照片太大，请选一张较小的图片':'图片内容较大，请压缩到 700KB 再上传');
   return data;
 }
 function header() {
@@ -472,11 +537,11 @@ document.addEventListener('input', event => {
   const target = event.target;
   if(target.name==='message'){const preview=target.closest('.message-options')?.querySelector('.message-preview span');if(preview)preview.textContent=target.value||'这次不捎话 🐾';}
   target.removeAttribute('aria-invalid'); target.parentElement?.querySelector('.field-error')?.remove();
-  if (target.name === 'postcode') {
+  if (target.name === 'postcode' && target.form?.elements.region.value!=='singapore') {
     const matches=POSTAL_LOOKUP[target.value]||[];
     const index=matches[0]?.[0]??POSTCODE_TABLE[target.value];
     if(index!==undefined){
-      target.form.elements.state.value=Lab.states[index];cityOptions('',matches);
+      target.form.elements.state.value=Lab.states[index];target.form.elements.region.value=[9,10,14].includes(index)?'east':'west';cityOptions('',matches);
       $('postcode-hint').textContent=matches.length?'📮 已带出城市与州属，两个都可以手动更改。':'📮 已找到州属，请从下拉列表确认城市。';
     }else if(target.value.length===5){cityOptions();$('postcode-hint').textContent='这组邮编小狗不确定，请从下拉列表选城市和州属。';}
     bill();
@@ -485,7 +550,9 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('change', event => {
   const target = event.target;
-  if (target.name === 'state') {const form=target.form;const previous=form.elements.city.value;cityOptions(previous,POSTAL_LOOKUP[form.elements.postcode.value]||[]);bill();}
+  if (target.name === 'state' && target.form?.dataset.form==='checkout') {const form=target.form,index=Lab.states.indexOf(target.value);form.elements.region.value=target.value==='Singapore'?'singapore':[9,10,14].includes(index)?'east':'west';const previous=form.elements.city.value;cityOptions(previous,POSTAL_LOOKUP[form.elements.postcode.value]||[]);deliveryFields();}
+  if(['region','fulfillment'].includes(target.name)&&target.form?.dataset.form==='checkout')deliveryFields();
+  if(target.name==='sameRecipient'){const fields=$('recipient-fields');fields.hidden=target.checked;fields.disabled=target.checked;}
   if (target.name === 'city') {const manual=target.value==='__other__';$('manual-city-label').hidden=!manual;target.form.elements.cityManual.disabled=!manual;target.form.elements.cityManual.required=manual;}
   if (target.name === 'role' && $('comment-credentials')) { $('comment-credentials').hidden = target.value !== 'order'; $('comment-credentials').disabled = target.value !== 'order'; }
   if (target.matches('[data-variant]')) {
@@ -509,12 +576,22 @@ document.addEventListener('submit', async event => {
     if(type==='filter'){productFilter=payload.keyword.trim();close();draw();}
     else if(type==='certificate'){const result=await api('certificate',payload);certificate(result.member,true);}
     else if(type==='message'){await api('message',payload);close();draw();tell('小狗记好啦，话已经捎上了 💬');}
+    else if (type === 'customize') {
+      const product=state.products.find(product=>product.id===id);
+      if(!product)throw Error('商品已更新，请重新选择');
+      const photo=product.allowPhoto?await upload(form.elements.customPhoto,cartCustom[form.dataset.key]?.photo,260000):'';
+      const customization={photo,fields:(product.customFields||[]).map((field,i)=>({label:field.label,value:String(payload['customField'+i]||'').trim()})),remark:String(payload.customRemark||'').trim()};
+      const key=form.dataset.key||product.id+'|'+form.dataset.variant+'|'+crypto.randomUUID();
+      const previous=cartCustom[key];cartCustom[key]=customization;
+      try{save('cart-custom',cartCustom);if(!form.dataset.key)await changeCart(key,Number(form.dataset.qty));}catch(error){if(previous)cartCustom[key]=previous;else delete cartCustom[key];save('cart-custom',cartCustom);throw error;}
+      close();draw();tell('定制资料已放进购物车 🎨');
+    }
     else if (type === 'checkout') {
-      if (!form.dataset.total) throw Error('请选择州属并确认运费');
+      if (!form.dataset.total) throw Error('请选择配送地区并确认运费');
       save('request', requestToken);
-      const result = await api('order', { ...payload, city:payload.city==='__other__'?payload.cityManual:payload.city, dog: selectedDog, consent: payload.consent === 'on', total: Number(form.dataset.total), token: requestToken, items: cartRows().map(row => ({ id: row.product.id, qty: row.qty, variant: row.variant })) });
+      const result = await api('order', { ...payload, checkoutVersion:2, sameRecipient:form.elements.sameRecipient.checked, city:payload.city==='__other__'?payload.cityManual:payload.city, dog: selectedDog, consent: payload.consent === 'on', total: Number(form.dataset.total), token: requestToken, items: cartRows().map(row => ({ id: row.product.id, qty: row.qty, variant: row.variant, line:row.key.split('|')[2]||'', customization:row.customization })) });
       selectedDog=result.dog??selectedDog;
-      cart = {}; save('cart', cart); requestToken = crypto.randomUUID(); save('request', requestToken);
+      cart = {}; cartCustom={};save('cart-custom',cartCustom);save('cart', cart); requestToken = crypto.randomUUID(); save('request', requestToken);
       draw();
       dialog('🎫 号码牌已到', '<div class="order-success">' + dogVisual(selectedDog, 'excited') + '<h2>' + Lab.ticket(result.order) + '</h2><p>' + Lab.dogs[selectedDog] + '接单了，正在等店长核款。</p><a class="button primary wide" target="_blank" rel="noopener" href="' + wa + '?text=' + encodeURIComponent('店长，这是 ' + Lab.ticket(result.order) + ' 的付款截图。') + '">到 WhatsApp 附上付款截图 ↗</a><a class="button wide" href="#track?order=' + result.order + '">去看我的小狗 →</a></div>');
       bark(selectedDog);
@@ -538,13 +615,13 @@ document.addEventListener('submit', async event => {
         if (parts.length !== 2 || !parts[0].trim() || !Number.isFinite(Number(parts[1]))) throw Error('规格请按「1 位麻瓜 | 59」填写，每行一项');
         return { label: parts[0].trim(), price: Math.round(Number(parts[1]) * 100) };
       });
-      await api('product', { ...payload, id, cat: Number(payload.cat), price: Math.round(Number(payload.price) * 100), stock: Number(payload.stock), active: payload.active === 'on', variants, photo: payload.clear ? '' : await upload(form.elements.photo, state.products.find(p => p.id === id)?.photo) });
+      await api('product', { ...payload, id, cat: Number(payload.cat), price: Math.round(Number(payload.price) * 100), stock: Number(payload.stock), active: payload.active === 'on', allowPhoto:payload.allowPhoto==='on', requirePhoto:payload.requirePhoto==='on', customFields:String(payload.customFields||'').split('\n').map(value=>value.trim()).filter(Boolean).map(value=>({label:value.replace(/\s*\*$/,'').trim(),required:value.endsWith('*')})), variants, photo: payload.clear ? '' : await upload(form.elements.photo, state.products.find(p => p.id === id)?.photo) });
       close(); draw(); tell('商品已保存，小狗开始理货。📦');
     } else if (type === 'update') {
       await api('update', { ...payload, order: id, version: Number(payload.version), stage: Number(payload.stage), mood: 0, quantities: [...form.querySelectorAll('[name^="qty"]')].map(input => Number(input.value)) });
       close(); draw(); tell('订单已更新，狗同事都知道了。🐶');
     } else if (type === 'settings') {
-      await api('settings', { west: payload.west === '' ? null : Math.round(Number(payload.west) * 100), east: payload.east === '' ? null : Math.round(Number(payload.east) * 100), qr: payload.clear ? '' : await upload(form.elements.photo, state.qr) });
+      await api('settings', { west: payload.west === '' ? null : Math.round(Number(payload.west) * 100), east: payload.east === '' ? null : Math.round(Number(payload.east) * 100), singapore:payload.singapore===''?null:Math.round(Number(payload.singapore)*100), pickupAddress:payload.pickupAddress, pickupInstructions:payload.pickupInstructions, qr: payload.clear ? '' : await upload(form.elements.photo, state.qr) });
       draw(); tell('设置已保存');
     }
   } catch (error) { if (modal.open && $('form-error')) $('form-error').textContent = error.message; else tell(error.message); }
@@ -555,7 +632,7 @@ async function changeCart(key, change) {
   const next = (cart[key] || 0) + change;
   const total = Object.entries(cart).filter(([k]) => k.split('|')[0] === product.id).reduce((sum, [, qty]) => sum + qty, 0) + change;
   if (next > 99 || (product.mode === 'stock' && total > product.stock)) throw Error('已达可购买数量，给别的麻瓜留一点 🐶');
-  if (next <= 0) delete cart[key]; else cart[key] = next;
+  if (next <= 0) {delete cart[key];delete cartCustom[key];save('cart-custom',cartCustom);} else cart[key] = next;
   save('cart', cart);
 }
 document.addEventListener('click', async event => {
@@ -577,15 +654,19 @@ document.addEventListener('click', async event => {
       const variant = Number(article.querySelector('[data-variant]')?.value || 0), key = product.id + '|' + variant;
       const quantity = Number(output.value || output.textContent || 1);
       if (action === 'add') {
+        if(product.allowPhoto||(product.customFields||[]).length){customizationForm(product,variant,quantity);return;}
         await changeCart(key, quantity);
         const open = [...document.querySelectorAll('.category')].map(node => node.open); draw();
         document.querySelectorAll('.category').forEach((node, i) => { node.open = open[i]; });
         tell('已加入 ' + product.name + ' × ' + quantity); tone(660);
       } else { output.value = Math.max(1, Math.min(99, quantity + (action === 'plus' ? 1 : -1))); tone(460); }
     } else if (['cart-minus', 'cart-plus'].includes(action)) { await changeCart(button.dataset.key, action === 'cart-plus' ? 1 : -1); draw(); tone(); }
-    else if(action==='empty-cart'){cart={};save('cart',cart);draw();tell('清空啦，小狗又擦了一遍车 🧹');}
+    else if(action==='empty-cart'){cart={};cartCustom={};save('cart',cart);save('cart-custom',cartCustom);draw();tell('清空啦，小狗又擦了一遍车 🧹');}
     else if(action==='category-back'){activeCategory=null;draw();}
     else if (action === 'checkout') checkout();
+    else if(action==='checkout-next')checkoutStep(1);
+    else if(action==='checkout-back')checkoutStep(-1);
+    else if(action==='edit-customization'){const row=cartRows().find(row=>row.key===button.dataset.key);if(row)customizationForm(row.product,row.variant,row.qty,row.key);}
     else if (action === 'copy') {
       try { await navigator.clipboard.writeText('0124390204'); tell('复制成功啦 ✓ TNG 号码已复制'); }
       catch { dialog('TNG 转账号码', '<input readonly value="0124390204" aria-label="复制 TNG 号码"><small>长按号码即可复制。</small>'); }

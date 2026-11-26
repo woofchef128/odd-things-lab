@@ -1,6 +1,6 @@
 const Lab = (() => {
   const dogs = ['鼻事多', '拖油瓶', '眨眼包', '煤球', '瞎打听', '毛毛', '胡须佬', '歪歪'];
-  const stages = ['待核款', '制作中', '要面交', '已寄出', '已完成', '不等咯', '排队中', '待寄出'];
+  const stages = ['待核款', '制作中', '待自取', '已寄出', '已完成', '不等咯', '排队中', '待寄出'];
   const moods = [['问号眼与沙漏'], ['敲木鱼', '侧目冷汗', '灵魂出窍'], ['水汪汪期待脸'], ['开怀大笑'], ['毕业帽大笑'], ['离家中'], ['八字眉弯眼笑', '无神无语', '打瞌睡'], ['放大镜验货']];
   const cats = ['打印出没区', '手捏观察室', '不准偷看室'];
   const states = ['Johor', 'Kedah', 'Kelantan', 'Melaka', 'Negeri Sembilan', 'Pahang', 'Perak', 'Perlis', 'Pulau Pinang', 'Sabah', 'Sarawak', 'Selangor', 'Terengganu', 'W.P. Kuala Lumpur', 'W.P. Labuan', 'W.P. Putrajaya'];
@@ -42,6 +42,9 @@ const Lab = (() => {
   };
   const newId = () => crypto.randomUUID();
   function migrate(s) {
+    s.shipping ??= [null, null, null];
+    if (s.shipping.length < 3) s.shipping.push(null);
+    s.pickup ??= { address: '', instructions: '' };
     s.members ??= {};
     s.accounts ??= {};
     s.meritTotals ??= {};
@@ -71,7 +74,7 @@ const Lab = (() => {
     return s;
   }
   function initial(demo = false) {
-    const s = { version: 4, seq: 0, products: [], orders: [], wishes: [], shipping: [null, null], qr: '', members: {}, accounts: {}, merit: {}, meritTotals: {}, receipts: {}, pins: {}, events: [] };
+    const s = { version: 4, seq: 0, products: [], orders: [], wishes: [], shipping: [null, null, null], qr: '', members: {}, accounts: {}, merit: {}, meritTotals: {}, receipts: {}, pins: {}, events: [] };
     if (!demo) return s;
     s.shipping = [800, 1500];
     s.products = [
@@ -115,7 +118,7 @@ const Lab = (() => {
       { id: 'elder', icon: '🏅', name: '开所元老', earned: m.id >= 1 && m.id <= 200, detail: '工号 #001–#200' },
       { id: 'chat', icon: '💬', name: '话唠麻瓜', earned: comments >= 10, detail: '留言满 10 次', progress: comments + '/10' },
       { id: 'repeat', icon: '🔄', name: '回头麻瓜', earned: active.length >= 3, detail: '下单满 3 次', progress: active.length + '/3' },
-      { id: 'meet', icon: '🤝', name: '见过店长', earned: finished.some(o => o.handover), detail: '面交过一次' },
+      { id: 'meet', icon: '🤝', name: '见过店长', earned: finished.some(o => o.handover || o.fulfillment === 'pickup'), detail: '自取过一次' },
       { id: 'pre', icon: '⏳', name: '耐心麻瓜', earned: finished.some(o => o.items.some(i => i.stocked === false)), detail: '收到过预购商品' },
       { id: 'letter', icon: '✉️', name: '信被拆啦', earned: s.wishes.some(w => ids.has(w.order) && w.done), detail: '一个点子被实现' },
       { id: 'collect', icon: '🧺', name: '收集麻瓜', earned: products >= 3, detail: '买过 3 款不同产品', progress: products + '/3' },
@@ -144,7 +147,7 @@ const Lab = (() => {
     const displayMember=member(s,key)||(pinnedProfile?{...pinnedProfile,name:masked(pinnedProfile.name),orders:[pinnedOrder.id]}:null);
     const identities = new Map(s.orders.map(o => [o.id, byPhone.get(normalizePhone(o.phone)) || null]));
     return {
-      products: admin ? s.products : s.products.filter(p => p.active), shipping: s.shipping, qr: s.qr,
+      products: admin ? s.products : s.products.filter(p => p.active), shipping: s.shipping, pickup: s.pickup, qr: s.qr,
       ...(admin ? { nextOrder: ticket(s.seq + 1) } : {}),
       member: displayMember, pins: [...new Set([...(s.pins[key] || []), ...(member(s, key)?.orders || [])])],
       orders: admin ? s.orders.map(o => ({...o,identity:identities.get(o.id)})) : s.orders.map(o => ({ id: o.id, customer: masked(o.buyer), stage: o.stage, dog: o.dog, message: o.message || '', mood: o.mood, statusAt: o.statusAt, created: o.created, items: o.items.map(i => ({ name: i.name, qty: i.qty, cat: i.cat ?? s.products.find(p=>p.id===i.id)?.cat ?? 0 })), sample: o.sample, identity: identities.get(o.id) })),
@@ -191,24 +194,55 @@ const Lab = (() => {
       const token = text(p.token, 80);
       if (!/^[a-zA-Z0-9-]{12,80}$/.test(token)) fail('订单请求无效');
       if (s.receipts[key + token]) return s.receipts[key + token];
-      const buyer = text(p.buyer, 65), phone = normalizePhone(text(p.phone, 22)), address = text(p.address, 70), city = text(p.city, 65), postcode = text(p.postcode, 5), payer = text(p.payer, 90);
-      if (!/^[A-Za-z0-9\s.,'&()/#-]+$/.test(buyer + address + city)) fail('邮寄资料请用英文或 Malay 填写哦');
-      if (!/^\d{9,15}$/.test(phone) || !/^\d{5}$/.test(postcode) || !states.includes(p.state)) fail('请检查电话、邮编和州属');
-      const fee = s.shipping[[9, 10, 14].includes(states.indexOf(p.state)) ? 1 : 0];
-      if (fee === null) fail('运费待店长确认');
+      const buyer = text(p.buyer, 65), phone = normalizePhone(text(p.phone, 22)), payer = text(p.payer, 90);
+      const fulfillment = p.fulfillment || 'delivery';
+      if (!['delivery', 'pickup'].includes(fulfillment)) fail('请选择配送或自取');
+      const email = text(p.email || '', 254, p.checkoutVersion === 2);
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('请填写有效的顾客邮箱');
+      const sameRecipient = p.sameRecipient === true;
+      const recipientName = text(sameRecipient ? buyer : (p.recipientName || buyer), 65);
+      const recipientPhone = normalizePhone(text(sameRecipient ? p.phone : (p.recipientPhone || p.phone), 22));
+      if (!/^\d{8,15}$/.test(phone) || !/^\d{8,15}$/.test(recipientPhone)) fail('请检查顾客和收件人电话号码');
+      let address = '', city = '', postcode = '', state = '', region = '', fee = 0;
+      if (fulfillment === 'delivery') {
+        address = text(p.address, 160); city = text(p.city, 65); postcode = text(p.postcode, 6); state = text(p.state, 65);
+        region = p.region || ([9,10,14].includes(states.indexOf(state)) ? 'east' : 'west');
+        if (!['west','east','singapore'].includes(region)) fail('请选择配送地区');
+        if (region === 'singapore') {
+          if (state !== 'Singapore' || !/^\d{6}$/.test(postcode)) fail('新加坡地址请填写六位邮编');
+        } else {
+          if (!states.includes(state) || !/^\d{5}$/.test(postcode)) fail('请检查马来西亚邮编和州属');
+          const expected = [9,10,14].includes(states.indexOf(state)) ? 'east' : 'west';
+          if (region !== expected) fail('配送地区与州属不一致，请重新选择');
+        }
+        if (!/^[A-Za-z0-9\s.,'&()/#-]+$/.test(address + city)) fail('邮寄地址请用英文或 Malay 填写哦');
+        fee = s.shipping[['west','east','singapore'].indexOf(region)];
+        if (fee == null) fail('该地区运费待店长设置，请先联系店长');
+      }
+      const pickupInfo = fulfillment === 'pickup' ? {...s.pickup} : null;
       const dog = s.accounts[phone]?.dog ?? integer(p.dog, 0, 7);
       if (!Array.isArray(p.items) || !p.items.length || p.items.length > 100) fail('请先选择商品');
       const seen = new Set(), totals = new Map();
       const items = p.items.map(row => {
         const product = s.products.find(a => a.id === row.id && a.active && a.mode !== 'custom');
         const variant = integer(row.variant ?? 0, 0, 99), entry = product?.variants?.[variant];
-        const key = row.id + ':' + variant;
+        const line = row.line ? text(row.line, 80) : '';
+        const key = row.id + ':' + variant + ':' + line;
         if (!product || seen.has(key) || (product.variants?.length && !entry) || (!product.variants?.length && variant !== 0)) fail('购物车需更新');
         seen.add(key);
         const qty = integer(row.qty, 1, 99);
         totals.set(product.id, (totals.get(product.id) || 0) + qty);
-        return { id: product.id, name: product.name + (entry ? ' · ' + entry.label : ''), photo: product.photo || '', price: entry?.price ?? product.price, qty, variant, cat:product.cat, stocked: product.mode === 'stock' };
+        const fields = product.customFields || [];
+        const enabled = product.allowPhoto || fields.length;
+        const source = row.customization || {};
+        const customPhoto = product.allowPhoto ? photo(source.photo || '') : '';
+        if (customPhoto.length > 260000) fail('定制照片太大，请压缩后重新上传');
+        if (product.requirePhoto && !customPhoto) fail(product.name + ' 需要上传定制照片');
+        const values = fields.map(field => ({ label: field.label, value: text((source.fields || []).find(value => value.label === field.label)?.value || '', 200, field.required) }));
+        const customization = enabled ? { photo: customPhoto, fields: values, remark: text(source.remark || '', 300, false) } : undefined;
+        return { id: product.id, name: product.name + (entry ? ' · ' + entry.label : ''), photo: product.photo || '', ...(customization ? {customization} : {}), price: entry?.price ?? product.price, qty, variant, cat:product.cat, stocked: product.mode === 'stock' };
       });
+      if (items.reduce((sum, item) => sum + (item.customization?.photo?.length || 0), 0) > 1000000) fail('定制照片总大小太大，请减少照片或分开下单');
       for (const [id, qty] of totals) {
         const product = s.products.find(a => a.id === id);
         if (product.mode === 'stock' && qty > product.stock) fail(product.name + ' 库存不足');
@@ -216,7 +250,7 @@ const Lab = (() => {
       const total = items.reduce((sum, i) => sum + i.qty * i.price, fee);
       if (total !== p.total) fail('金额已变更，请刷新核对后提交');
       for (const [id, qty] of totals) { const item = s.products.find(a => a.id === id); if (item.mode === 'stock') item.stock -= qty; }
-      const o = { id: ++s.seq, buyer, phone, address, city, postcode, state: p.state, payer, dog, mood: 0, items, total, fee, stage: 0, consent: p.consent === true, created: Date.now(), statusAt: Date.now(), carrier: '', tracking: '', url: '', message: text(p.message || '', 100, false) };
+      const o = { id: ++s.seq, buyer, phone, address, city, postcode, state, fulfillment, region, pickupInfo, email, recipientName, recipientPhone, payer, dog, mood: 0, items, total, fee, stage: 0, consent: p.consent === true, created: Date.now(), statusAt: Date.now(), carrier: '', tracking: '', url: '', message: text(p.message || '', 300, false) };
       s.orders.unshift(o);
       s.accounts[phone] ??= {id:o.id,phone,name:buyer,dog,merit:s.meritTotals[key]||0,earned:[]};
       s.members[key]={phone};s.owners[key]=phone;
@@ -250,7 +284,9 @@ const Lab = (() => {
         if (!['stock', 'pre', 'custom'].includes(p.mode)) fail('请选择销售方式');
         const variants = (p.variants || []).map(v => ({ label: text(v.label, 30), price: integer(v.price, 1, 99999999) }));
         if (variants.length > 12) fail('最多设置 12 种规格');
-        const item = { id: p.id ? text(p.id, 80) : newId(), name, cat, price: integer(p.price, 1, 99999999), stock: integer(p.stock, 0, 99999), mode: cat && p.mode !== 'custom' ? 'pre' : p.mode, lead: text(p.lead || '', 80, false), description: text(p.description || '', 200, false), photo: photo(p.photo), active: !!p.active, variants };
+        const customFields = (p.customFields || []).map(field => ({label: text(field.label, 60), required: field.required === true}));
+        if (customFields.length > 6 || new Set(customFields.map(field => field.label)).size !== customFields.length) fail('定制文字栏最多六项，名称不能重复');
+        const item = { allowPhoto: p.allowPhoto === true, requirePhoto: p.allowPhoto === true && p.requirePhoto === true, customFields, id: p.id ? text(p.id, 80) : newId(), name, cat, price: integer(p.price, 1, 99999999), stock: integer(p.stock, 0, 99999), mode: cat && p.mode !== 'custom' ? 'pre' : p.mode, lead: text(p.lead || '', 80, false), description: text(p.description || '', 200, false), photo: photo(p.photo), active: !!p.active, variants };
         const index = s.products.findIndex(x => x.id === item.id);
         if (index >= 0) s.products[index] = item; else s.products.push(item);
       } else if (op === 'reset-order-numbering') {
@@ -280,14 +316,15 @@ const Lab = (() => {
         } else if (s.accounts[phone]?.id === id) s.accounts[phone].id = remaining[0].id;
         result = { deleted: id };
       } else if (op === 'settings') {
-        const shipping = [p.west, p.east].map(v => v === null ? null : integer(v, 0, 999999));
+        const shipping = [p.west, p.east, p.singapore === undefined ? s.shipping[2] : p.singapore].map(v => v === null ? null : integer(v, 0, 999999));
         const qr = photo(p.qr); s.shipping = shipping; s.qr = qr;
+        if (p.pickupAddress !== undefined) s.pickup = { address: text(p.pickupAddress || '', 200, false), instructions: text(p.pickupInstructions || '', 300, false) };
       } else if (op === 'update') {
         const o = s.orders.find(o => o.id === numId(p.order)) || fail('找不到订单');
         if (p.version !== undefined && p.version !== (o.version || 0)) fail('这笔订单刚更新过，请重新打开');
         const stage = integer(p.stage, 0, stages.length - 1), url = text(p.url || '', 500, false);
         if (url && !/^https:\/\//i.test(url)) fail('物流链接须以 https:// 开头');
-        const edits = { stage, mood: integer(p.mood ?? 0, 0, moods[stage].length - 1), url, handover: o.handover || stage === 2, carrier: text(p.carrier || '', 60, false), tracking: text(p.tracking || '', 100, false), address: text(p.address || o.address, 70), note: text(p.note || '', 200, false) };
+        const edits = { stage, mood: integer(p.mood ?? 0, 0, moods[stage].length - 1), url, handover: o.handover || stage === 2, carrier: text(p.carrier || '', 60, false), tracking: text(p.tracking || '', 100, false), address: text(p.address || o.address || '', 160, o.fulfillment !== 'pickup'), note: text(p.note || '', 200, false) };
         if (p.quantities) {
           if (!Array.isArray(p.quantities) || p.quantities.length !== o.items.length) fail('订单内容已变更');
           const quantities = p.quantities.map(q => integer(q, 0, 99));
